@@ -24,27 +24,26 @@ import SparseArrays
 import ArgParse
 import GZip
 import JSON3
-
 import FirstOrderLp
 
 function run_with_redirected_stdio(func, stdout_path, stderr_path)
-  open(stdout_path, "w") do stdout_io
-    open(stderr_path, "w") do stderr_io
-      redirect_stdout(stdout_io) do
-        redirect_stderr(stderr_io) do
-          func()
+    open(stdout_path, "w") do stdout_io
+        open(stderr_path, "w") do stderr_io
+            redirect_stdout(stdout_io) do
+                redirect_stderr(stderr_io) do
+                    func()
+                end
+            end
         end
-      end
     end
-  end
 end
 
 function write_vector_to_file(filename, vector)
-  open(filename, "w") do io
-    for x in vector
-      println(io, x)
+    open(filename, "w") do io
+        for x in vector
+            println(io, x)
+        end
     end
-  end
 end
 
 """
@@ -63,102 +62,99 @@ If `redirect_stdio` is `True`, then it also writes `instance_stderr.txt`
 and `instance_stdout.txt`.
 """
 function solve_instance_and_output(
-  parameters::Union{
-    FirstOrderLp.MirrorProxParameters,
-    FirstOrderLp.PdhgParameters,
-  },
+  parameters::Union{FirstOrderLp.MirrorProxParameters,FirstOrderLp.PdhgParameters,},
   output_dir::String,
   instance_path::String,
   redirect_stdio::Bool,
   transform_bounds::Bool,
   fixed_format_input::Bool,
 )
-  if !isdir(output_dir)
-    mkpath(output_dir)
-  end
+    if !isdir(output_dir)
+        mkpath(output_dir)
+    end
 
-  instance_name =
+    instance_name =
     replace(basename(instance_path), r"\.(mps|MPS|qps|QPS)(\.gz)?$" => "")
 
-  function inner_solve()
-    lower_file_name = lowercase(basename(instance_path))
-    if endswith(lower_file_name, ".mps") ||
+    function inner_solve()
+        lower_file_name = lowercase(basename(instance_path))
+        if endswith(lower_file_name, ".mps") ||
        endswith(lower_file_name, ".mps.gz") ||
        endswith(lower_file_name, ".qps") ||
        endswith(lower_file_name, ".qps.gz")
-      lp = FirstOrderLp.qps_reader_to_standard_form(
+            lp = FirstOrderLp.qps_reader_to_standard_form(
         instance_path,
-        fixed_format = fixed_format_input,
+        fixed_format=fixed_format_input,
       )
-    else
-      error(
+        else
+            error(
         "Instance has unrecognized file extension: ",
         basename(instance_path),
       )
-    end
+        end
 
-    presolve_info = FirstOrderLp.presolve(
+        presolve_info = FirstOrderLp.presolve(
       lp;
-      verbosity = parameters.verbosity,
-      transform_bounds = transform_bounds,
+      verbosity=parameters.verbosity,
+      transform_bounds=transform_bounds,
     )
 
-    if parameters.verbosity >= 1
-      println("Instance: ", instance_name)
-    end
-    running_time = @elapsed begin
-      output::FirstOrderLp.SaddlePointOutput =
+        if parameters.verbosity >= 1
+            println("Instance: ", instance_name)
+        end
+        running_time = @elapsed begin
+            output::FirstOrderLp.SaddlePointOutput =
         FirstOrderLp.optimize(parameters, lp)
-    end
-    println("Elapsed time: $running_time sec")
+        end
+        println("Elapsed time: $running_time sec")
 
-    log = FirstOrderLp.SolveLog()
-    log.instance_name = instance_name
-    log.command_line_invocation = join([PROGRAM_FILE; ARGS...], " ")
-    log.termination_reason = output.termination_reason
-    log.termination_string = output.termination_string
-    log.iteration_count = output.iteration_count
-    log.solve_time_sec = running_time
+        log = FirstOrderLp.SolveLog()
+        log.instance_name = instance_name
+        log.command_line_invocation = join([PROGRAM_FILE; ARGS...], " ")
+        log.termination_reason = output.termination_reason
+        log.termination_string = output.termination_string
+        log.iteration_count = output.iteration_count
+        log.solve_time_sec = running_time
     # This assumes that the last iterate matches the solution returned by the
     # solver.
-    log.solution_stats = output.iteration_stats[end]
+        log.solution_stats = output.iteration_stats[end]
     # TODO: Update this once we return more than one type.
-    log.solution_type = FirstOrderLp.POINT_TYPE_AVERAGE_ITERATE
+        log.solution_type = FirstOrderLp.POINT_TYPE_AVERAGE_ITERATE
 
-    summary_output_path = joinpath(output_dir, instance_name * "_summary.json")
-    open(summary_output_path, "w") do io
-      write(io, JSON3.write(log, allow_inf = true))
-    end
+        summary_output_path = joinpath(output_dir, instance_name * "_summary.json")
+        open(summary_output_path, "w") do io
+            write(io, JSON3.write(log, allow_inf=true))
+        end
 
-    log.iteration_stats = output.iteration_stats
-    full_log_output_path =
+        log.iteration_stats = output.iteration_stats
+        full_log_output_path =
       joinpath(output_dir, instance_name * "_full_log.json.gz")
-    GZip.open(full_log_output_path, "w") do io
-      write(io, JSON3.write(log, allow_inf = true))
-    end
+        GZip.open(full_log_output_path, "w") do io
+            write(io, JSON3.write(log, allow_inf=true))
+        end
 
-    primal_solution, dual_solution = FirstOrderLp.undo_presolve(
+        primal_solution, dual_solution = FirstOrderLp.undo_presolve(
       presolve_info,
       output.primal_solution,
       output.dual_solution,
     )
 
-    primal_output_path = joinpath(output_dir, instance_name * "_primal.txt")
-    write_vector_to_file(primal_output_path, primal_solution)
+        primal_output_path = joinpath(output_dir, instance_name * "_primal.txt")
+        write_vector_to_file(primal_output_path, primal_solution)
 
-    dual_output_path = joinpath(output_dir, instance_name * "_dual.txt")
-    write_vector_to_file(dual_output_path, dual_solution)
-  end
+        dual_output_path = joinpath(output_dir, instance_name * "_dual.txt")
+        write_vector_to_file(dual_output_path, dual_solution)
+    end
 
-  if redirect_stdio
-    stdout_path = joinpath(output_dir, instance_name * "_stdout.txt")
-    stderr_path = joinpath(output_dir, instance_name * "_stderr.txt")
-    run_with_redirected_stdio(inner_solve, stdout_path, stderr_path)
-  else
-    inner_solve()
-  end
+    if redirect_stdio
+        stdout_path = joinpath(output_dir, instance_name * "_stdout.txt")
+        stderr_path = joinpath(output_dir, instance_name * "_stderr.txt")
+        run_with_redirected_stdio(inner_solve, stdout_path, stderr_path)
+    else
+        inner_solve()
+    end
 
-  return
+    return
 end
 
 """
@@ -168,14 +164,14 @@ Defines parses and args.
 A dictionary with the values of the command-line arguments.
 """
 function parse_command_line()
-  arg_parse = ArgParse.ArgParseSettings()
+    arg_parse = ArgParse.ArgParseSettings()
 
-  help_method = "The optimization method to use, must be `mirror-prox` or `pdhg`."
+    help_method = "The optimization method to use, must be `mirror-prox` or `pdhg`."
 
-  help_instance_path = "The path to the instance to solve in .mps.gz or .mps format."
+    help_instance_path = "The path to the instance to solve in .mps.gz or .mps format."
 
-  ArgParse.@add_arg_table! arg_parse begin
-    "--method"
+    ArgParse.@add_arg_table! arg_parse begin
+        "--method"
     help = help_method
     arg_type = String
     required = true
@@ -276,7 +272,7 @@ function parse_command_line()
 
     "--primal_weight_update_smoothing"
     help =
-      "This parameter controls exponential smoothing of " *
+        "This parameter controls exponential smoothing of " *
       "log(primal_weight) when updating the primal weight. " *
       "Must be between 0.0 and 1.0 inclusive. At 0.0, the primal " *
       "weight is frozen at the initial value given by the " *
@@ -307,7 +303,7 @@ function parse_command_line()
       "and dual variables individually."
     arg_type = String
     default = "off"
-
+        
     "--restart_scheme"
     help =
       "Supported steps: {no_restart, fixed_frequency, " *
@@ -345,7 +341,7 @@ function parse_command_line()
       "Whether to use an approximate localized duality gap in the " *
       "restart scheme."
     arg_type = Bool
-    default = false
+        default = false
 
     "--record_iteration_stats"
     help =
@@ -372,11 +368,11 @@ function parse_command_line()
       "l_inf}"
     arg_type = String
 
-    "--absolute_optimality_tol"
+        "--absolute_optimality_tol"
     help = "The absolute tolerance for the optimality criteria."
     arg_type = Float64
 
-    "--relative_optimality_tol"
+        "--relative_optimality_tol"
     help = "The relative tolerance for the optimality criteria."
     arg_type = Float64
 
@@ -595,15 +591,36 @@ function main()
   else
     error("`method` arg must be either `mirror-prox` or `pdhg`.")
   end
-
-  solve_instance_and_output(
-    parameters,
-    parsed_args["output_dir"],
-    parsed_args["instance_path"],
-    parsed_args["redirect_stdio"],
-    parsed_args["transform_bounds_into_linear_constraints"],
-    parsed_args["fixed_format_input"],
-  )
+  if isdir(parsed_args["instance_path"])
+    for f in readdir(parsed_args["instance_path"], join=true)
+      if endswith(f, ".gz")
+        println(f)
+        flush(stdout)
+        try
+          solve_instance_and_output(
+                parameters,
+            parsed_args["output_dir"],
+            f,
+            parsed_args["redirect_stdio"],
+            parsed_args["transform_bounds_into_linear_constraints"],
+            parsed_args["fixed_format_input"],
+          ) 
+        catch e
+          println("failed")
+        end
+        flush(stdout)
+    end
+  end
+  else
+    solve_instance_and_output(
+      parameters,
+      parsed_args["output_dir"],
+      parsed_args["instance_path"],
+      parsed_args["redirect_stdio"],
+      parsed_args["transform_bounds_into_linear_constraints"],
+      parsed_args["fixed_format_input"],
+    )
+  end
 end
 
 main()
