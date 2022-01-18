@@ -610,14 +610,14 @@ function main()
         end
         flush(stdout)
     end
-  end
-  else
+  endelse
     solve_instance_and_output(
       parameters,
       parsed_args["output_dir"],
       parsed_args["instance_path"],
       parsed_args["redirect_stdio"],
-      parsed_args["transform_bounds_into_linear_constraints"],
+      parsed_args[
+  "transform_bounds_into_linear_constraints"],
       parsed_args["fixed_format_input"],
     )
   end

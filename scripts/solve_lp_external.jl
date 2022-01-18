@@ -322,6 +322,11 @@ function parse_command_line()
     arg_type = Int64
     default = typemax(Int64)
 
+    "--time_sec_limit"
+    help = "Maximum number of seconds to run."
+    arg_type = Int64
+    default = typemax(Int64)
+
     # NOTE: This flag is required for compatibility with experiment scripts.
     "--redirect_stdio"
     help = "Redirect stdout and stderr to files (for batch runs). The false value is not supported."
@@ -339,7 +344,7 @@ function main()
   if !parsed_args["redirect_stdio"]
     error("The current implementation doesn't support redirect_stdio=false.")
   end
-
+  time_sec_limit = parsed_args["time_sec_limit"]
   iteration_limit = parsed_args["iteration_limit"]
 
   if parsed_args["solver"] == "scs-indirect" ||
@@ -372,6 +377,8 @@ function main()
     else
       push!(parameters, ("linear_solver", SCS.DirectSolver))
     end
+    # not able to do this, only support linear_solver, normalize, scale, rho_x, max_iters, eps, alpha, cg_rate, verbose, warm_start, acceleration_lookback and write_data_filename
+    # push!(parameters, ("time_sec_limit", parsed_args["time_sec_limit"]))
     optimizer_with_attributes = MathOptInterface.OptimizerWithAttributes(
       SCS.Optimizer,
       [MOI.RawParameter(p) => v for (p, v) in parameters],
@@ -409,13 +416,34 @@ function main()
     error("Unrecognized solver $(parsed_args["solver"]).")
   end
 
-  solve_instance_and_output(
-    optimizer_with_attributes,
-    parsed_args["output_dir"],
-    parsed_args["instance_path"],
-    parsed_args["print_stdout"],
-    parsed_args["fixed_format_input"],
-  )
+  if isdir(parsed_args["instance_path"])
+    for f in readdir(parsed_args["instance_path"], join = true)
+      if endswith(f, ".gz")
+        println(f)
+        flush(stdout)
+        try
+          solve_instance_and_output(
+            optimizer_with_attributes,
+            parsed_args["output_dir"],
+            f,
+            parsed_args["print_stdout"],
+            parsed_args["fixed_format_input"],
+          )
+        catch e
+          println("failed")
+        end
+      end
+      flush(stdout)
+    end
+  else
+    solve_instance_and_output(
+      optimizer_with_attributes,
+      parsed_args["output_dir"],
+      parsed_args["instance_path"],
+      parsed_args["print_stdout"],
+      parsed_args["fixed_format_input"],
+    )
+  end
 end
 
 main()
